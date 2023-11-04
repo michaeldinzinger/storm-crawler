@@ -128,6 +128,8 @@ public class HttpRobotRulesParser extends RobotRulesParser {
             int code = response.getStatusCode();
             bytesFetched.add(response.getContent() != null ? response.getContent().length : 0);
 
+            System.out.println("---- code: " + code);
+
             // According to RFC9309, the crawler should follow at least 5 consecutive redirects
             // to get the robots.txt file.
             int numRedirects = 0;

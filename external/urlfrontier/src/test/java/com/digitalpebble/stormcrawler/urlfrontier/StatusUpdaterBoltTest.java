@@ -17,10 +17,12 @@ package com.digitalpebble.stormcrawler.urlfrontier;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.digitalpebble.stormcrawler.FrontierMock;
 import com.digitalpebble.stormcrawler.Metadata;
 import com.digitalpebble.stormcrawler.TestOutputCollector;
 import com.digitalpebble.stormcrawler.TestUtil;
 import com.digitalpebble.stormcrawler.persistence.Status;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -173,5 +175,38 @@ public class StatusUpdaterBoltTest {
 
         store("http://example.com/?test=3", Status.DISCOVERED, new Metadata());
         Assert.assertEquals(true, isAcked("http://example.com/?test=3", 10));
+    }
+
+    @Test
+    public void handleGrpcInternalError()
+            throws ExecutionException, InterruptedException, TimeoutException, IOException {
+        FrontierMock mock = new FrontierMock();
+        mock.bindService();
+
+        final var config = new HashMap<String, Object>();
+        config.put(
+                "urlbuffer.class",
+                "com.digitalpebble.stormcrawler.persistence.urlbuffer.SimpleURLBuffer");
+        config.put(Constants.URLFRONTIER_HOST_KEY, connection.getHost());
+        config.put(Constants.URLFRONTIER_PORT_KEY, connection.getPort());
+        config.put(
+                "scheduler.class", "com.digitalpebble.stormcrawler.persistence.DefaultScheduler");
+        config.put("status.updater.cache.spec", "maximumSize=10000,expireAfterAccess=1h");
+        config.put("metadata.persist", persistedKey);
+        config.put("urlfrontier.updater.max.messages", 1);
+        config.put("urlfrontier.cache.expireafter.sec", 10);
+
+        output = new TestOutputCollector();
+        bolt.prepare(config, TestUtil.getMockedTopologyContext(), new OutputCollector(output));
+
+        final var url = "https://www.url.net/something";
+        final var meta = new Metadata();
+        meta.setValue(persistedKey, "somePersistedMetaInfo");
+        meta.setValue(notPersistedKey, "someNotPersistedMetaInfo");
+
+        store(url, Status.DISCOVERED, meta);
+        Assert.assertEquals(true, isAcked(url, 5));
+
+        mock.close();
     }
 }

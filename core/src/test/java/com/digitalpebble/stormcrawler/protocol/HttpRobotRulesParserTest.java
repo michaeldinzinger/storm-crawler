@@ -30,12 +30,14 @@ import org.junit.Test;
 
 public class HttpRobotRulesParserTest {
 
-    private static final int[] ports = {8089, 8090, 8091, 8092, 8093, 8094, 8095};
+    private static final int[] ports = {8089, 8090, 8091, 8092, 8093, 8094, 8095, 8096};
     private Config conf = new Config();
     private Protocol protocol;
+    private final String newLine = System.getProperty("line.separator");
     private String body;
     private String url0 = "http://localhost:" + ports[0];
     private String url1 = "http://localhost:" + ports[1];
+    private String url7 = "http://localhost:" + ports[7];
 
     @Rule public WireMockRule wireMockRule0 = new WireMockRule(ports[0]);
     @Rule public WireMockRule wireMockRule1 = new WireMockRule(ports[1]);
@@ -44,6 +46,7 @@ public class HttpRobotRulesParserTest {
     @Rule public WireMockRule wireMockRule4 = new WireMockRule(ports[4]);
     @Rule public WireMockRule wireMockRule5 = new WireMockRule(ports[5]);
     @Rule public WireMockRule wireMockRule6 = new WireMockRule(ports[6]);
+    @Rule public WireMockRule wireMockRule7 = new WireMockRule(ports[7]);
 
     @Before
     public void setUp() throws Exception {
@@ -52,7 +55,6 @@ public class HttpRobotRulesParserTest {
         protocol = protocolFactory.getProtocol("http")[0];
         protocolFactory.cleanup();
 
-        String newLine = System.getProperty("line.separator");
         body =
                 new StringBuilder()
                         .append("User-agent: this.is.only.a.test")
@@ -220,5 +222,28 @@ public class HttpRobotRulesParserTest {
         robotRules = httpRobotRulesParser.getRobotRulesSet(protocol, url1);
 
         Assert.assertTrue(robotRules.isAllowAll());
+    }
+
+    @Test
+    public void parseUnclearRobotRules() {
+        String body =
+                new StringBuilder()
+                        .append("User-agent: *")
+                        .append(newLine)
+                        .append("Disallow:")
+                        .toString();
+
+        configureFor(wireMockRule7.port());
+        stubFor(
+                get(urlPathEqualTo("/robots.txt"))
+                        .willReturn(aResponse().withBody(body).withStatus(200)));
+
+        HttpRobotRulesParser httpRobotRulesParser = new HttpRobotRulesParser();
+        httpRobotRulesParser.setConf(conf);
+        BaseRobotRules robotRules = httpRobotRulesParser.getRobotRulesSet(protocol, url7);
+
+        Assert.assertFalse(robotRules.isAllowAll());
+        Assert.assertFalse(robotRules.isAllowNone());
+        Assert.assertTrue(robotRules.isAllowed(url7 + "/index.html"));
     }
 }

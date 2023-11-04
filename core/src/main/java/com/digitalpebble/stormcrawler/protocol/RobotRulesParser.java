@@ -148,6 +148,8 @@ public abstract class RobotRulesParser {
      */
     public BaseRobotRules parseRules(
             String url, byte[] content, String contentType, String robotName) {
+        System.out.println(
+                "---- url: " + url + " " + content + " " + contentType + " " + robotName);
         return robotParser.parseContent(url, content, contentType, robotName);
     }
 
