@@ -40,9 +40,6 @@ public class SiteMapParserBoltTest extends ParsingTester {
         setupParserBolt(bolt);
     }
 
-    // TODO add a test for a sitemap containing links
-    // to other sitemap files
-
     @Test
     public void testSitemapParsing() throws IOException {
 
@@ -60,6 +57,39 @@ public class SiteMapParserBoltTest extends ParsingTester {
         // TODO test that the new links have the right metadata
         List<Object> fields = output.getEmitted(Constants.StatusStreamName).get(0);
         Assert.assertEquals(3, fields.size());
+    }
+
+    @Test
+    public void testSitemapIndexParsing() throws IOException {
+
+        prepareParserBolt("test.parsefilters.json");
+
+        Metadata metadata = new Metadata();
+        // specify that it is a sitemap file
+        metadata.setValue(SiteMapParserBolt.isSitemapKey, "true");
+        // and its mime-type
+        metadata.setValue(HttpHeaders.CONTENT_TYPE, "application/xml");
+
+        parse(
+                "http://www.tripadvisor.com/sitemap-index.xml",
+                "tripadvisor.sitemap.index.xml",
+                metadata);
+
+        Assert.assertEquals(5, output.getEmitted(Constants.StatusStreamName).size());
+    }
+
+    @Test
+    public void testGzipSitemapParsing() throws IOException {
+
+        prepareParserBolt("test.parsefilters.json");
+
+        Metadata metadata = new Metadata();
+        // specify that it is a sitemap file
+        metadata.setValue(SiteMapParserBolt.isSitemapKey, "true");
+
+        parse("https://www.tripadvisor.com/sitemap.xml.gz", "tripadvisor.sitemap.xml.gz", metadata);
+
+        Assert.assertEquals(50001, output.getEmitted(Constants.StatusStreamName).size());
     }
 
     @Test

@@ -37,6 +37,8 @@ import crawlercommons.sitemaps.SiteMapURL.ChangeFrequency;
 import crawlercommons.sitemaps.UnknownFormatException;
 import crawlercommons.sitemaps.extension.Extension;
 import crawlercommons.sitemaps.extension.ExtensionMetadata;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -47,6 +49,7 @@ import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.GZIPInputStream;
 import org.apache.commons.lang.StringUtils;
 import org.apache.storm.metric.api.MeanReducer;
 import org.apache.storm.metric.api.ReducedMetric;
@@ -96,6 +99,21 @@ public class SiteMapParserBolt extends StatusEmitterBolt {
         String ct = metadata.getFirstValue(HttpHeaders.CONTENT_TYPE);
 
         LOG.debug("Processing {}", url);
+
+        try {
+            content = decompressIfGzip(content);
+        } catch (Exception e) {
+            // exception while parsing the sitemap
+            String errorMessage = "Exception while decompressing " + url + ": " + e;
+            LOG.error(errorMessage);
+            // send to status stream in case another component wants to update its status
+            metadata.setValue(Constants.STATUS_ERROR_SOURCE, "sitemap decompressing");
+            metadata.setValue(Constants.STATUS_ERROR_MESSAGE, errorMessage);
+            collector.emit(
+                    Constants.StatusStreamName, tuple, new Values(url, metadata, Status.ERROR));
+            collector.ack(tuple);
+            return;
+        }
 
         boolean looksLikeSitemap = sniff(content);
         // can force the mimetype as we know it is XML
@@ -375,5 +393,30 @@ public class SiteMapParserBolt extends StatusEmitterBolt {
         }
         int position = Bytes.indexOf(beginning, clue);
         return position != -1;
+    }
+
+    public byte[] decompressIfGzip(byte[] content) throws IOException {
+        if (isGzipCompressed(content)) {
+            return decompressGzip(content);
+        } else {
+            return content;
+        }
+    }
+
+    private boolean isGzipCompressed(byte[] bytes) {
+        return bytes.length >= 2
+                && ((bytes[0] == (byte) (GZIPInputStream.GZIP_MAGIC))
+                        && (bytes[1] == (byte) (GZIPInputStream.GZIP_MAGIC >> 8)));
+    }
+
+    private byte[] decompressGzip(byte[] compressed) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        GZIPInputStream gis = new GZIPInputStream(new ByteArrayInputStream(compressed));
+        byte[] buffer = new byte[1024];
+        int len;
+        while ((len = gis.read(buffer)) != -1) {
+            baos.write(buffer, 0, len);
+        }
+        return baos.toByteArray();
     }
 }
